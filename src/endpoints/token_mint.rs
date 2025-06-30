@@ -5,10 +5,10 @@ use base64;
 use serde::Deserialize;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
-use solana_sdk::signature::Signer;
 use spl_token::instruction::mint_to;
 
 use crate::helpers::AccountMetaResponse;
+use crate::helpers::ApiResponse;
 
 #[derive(Deserialize)]
 struct TokenMintRequest {
@@ -89,9 +89,10 @@ pub async fn token_mint(req: web::Json<TokenMintRequest>) -> actix_web::Result<H
         accounts,
         instruction_data,
     };
-    let response = serde_json::json!({
-        "success": true,
-        "data": data
-    });
+
+    let response = ApiResponse {
+        success: true,
+        data: data,
+    };
     Ok(HttpResponse::Ok().json(response))
 }

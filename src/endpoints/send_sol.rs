@@ -7,6 +7,8 @@ use serde::Serialize;
 use solana_program::pubkey::Pubkey;
 use solana_program::system_instruction;
 
+use crate::helpers::ApiResponse;
+
 #[derive(Deserialize)]
 struct SendSolRequest {
     from: String,
@@ -60,8 +62,9 @@ pub async fn send_sol(req: web::Json<SendSolRequest>) -> actix_web::Result<HttpR
         accounts,
         instruction_data,
     };
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "success": true,
-        "data": data
-    })))
+    let response = ApiResponse {
+        success: true,
+        data: data,
+    };
+    Ok(HttpResponse::Ok().json(response))
 }

@@ -8,6 +8,7 @@ use solana_program::pubkey::Pubkey;
 use spl_token::instruction::initialize_mint;
 
 use crate::helpers::AccountMetaResponse;
+use crate::helpers::ApiResponse;
 
 #[derive(Deserialize)]
 struct TokenCreateRequest {
@@ -79,9 +80,9 @@ pub async fn token_create(req: web::Json<TokenCreateRequest>) -> actix_web::Resu
         accounts,
         instruction_data,
     };
-    let response = serde_json::json!({
-        "success": true,
-        "data": data
-    });
+    let response = ApiResponse {
+        success: true,
+        data: data,
+    };
     Ok(HttpResponse::Ok().json(response))
 }

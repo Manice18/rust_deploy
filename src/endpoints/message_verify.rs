@@ -1,11 +1,10 @@
-
 use actix_web::{HttpResponse, post, web};
 use base64;
 use bs58;
 use serde::Deserialize;
 use serde::Serialize;
-use solana_sdk::signature::Signer;
 
+use crate::helpers::ApiResponse;
 
 #[derive(Deserialize)]
 struct MessageVerifyRequest {
@@ -77,8 +76,9 @@ pub async fn message_verify(
         message: req.message.clone(),
         pubkey: req.pubkey.clone(),
     };
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "success": true,
-        "data": data
-    })))
+    let response = ApiResponse {
+        success: true,
+        data: data,
+    };
+    Ok(HttpResponse::Ok().json(response))
 }

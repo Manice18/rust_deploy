@@ -5,6 +5,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use solana_sdk::signature::{Keypair, Signer};
 
+use crate::helpers::ApiResponse;
+
 #[derive(Deserialize)]
 struct MessageSignRequest {
     message: String,
@@ -53,8 +55,9 @@ pub async fn message_sign(req: web::Json<MessageSignRequest>) -> actix_web::Resu
         public_key: public_key_b58,
         message: req.message.clone(),
     };
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "success": true,
-        "data": data
-    })))
+    let response = ApiResponse {
+        success: true,
+        data: data,
+    };
+    Ok(HttpResponse::Ok().json(response))
 }
