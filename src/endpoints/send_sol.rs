@@ -1,13 +1,11 @@
 use std::str::FromStr;
 
 use actix_web::{HttpResponse, post, web};
-use base64;
+use bs58;
 use serde::Deserialize;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
 use solana_program::system_instruction;
-
-use crate::helpers::ApiResponse;
 
 #[derive(Deserialize)]
 struct SendSolRequest {
@@ -26,7 +24,7 @@ struct SendSolResponse {
 #[post("/send/sol")]
 pub async fn send_sol(req: web::Json<SendSolRequest>) -> actix_web::Result<HttpResponse> {
     if req.from.is_empty() || req.to.is_empty() {
-        return Ok(HttpResponse::Ok().json(serde_json::json!({
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
             "success": false,
             "error": "Missing required fields"
         })));
@@ -34,21 +32,27 @@ pub async fn send_sol(req: web::Json<SendSolRequest>) -> actix_web::Result<HttpR
     let from_pubkey = match Pubkey::from_str(&req.from) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
-                "error": "Invalid from address"
+                "error": "Invalid sender public key"
             })));
         }
     };
     let to_pubkey = match Pubkey::from_str(&req.to) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Invalid to address"
             })));
         }
     };
+    if req.lamports == 0 {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "success": false,
+            "error": "Amount must be greater than 0"
+        })));
+    }
     let lamports = req.lamports;
     let ix = system_instruction::transfer(&from_pubkey, &to_pubkey, lamports);
     let accounts: Vec<String> = ix
@@ -56,15 +60,14 @@ pub async fn send_sol(req: web::Json<SendSolRequest>) -> actix_web::Result<HttpR
         .iter()
         .map(|meta| meta.pubkey.to_string())
         .collect();
-    let instruction_data = base64::encode(&ix.data);
+    let instruction_data = bs58::encode(&ix.data).into_string();
     let data = SendSolResponse {
         program_id: ix.program_id.to_string(),
         accounts,
         instruction_data,
     };
-    let response = ApiResponse {
-        success: true,
-        data: data,
-    };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "data": data
+    })))
 }

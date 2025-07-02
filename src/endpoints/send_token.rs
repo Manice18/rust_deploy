@@ -1,100 +1,109 @@
 use std::str::FromStr;
 
 use actix_web::{HttpResponse, post, web};
-use base64;
+use base64::{Engine as _, engine::general_purpose};
 use serde::Deserialize;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
+use spl_associated_token_account::get_associated_token_address;
 
-use crate::helpers::AccountMetaResponse;
-use crate::helpers::ApiResponse;
+#[derive(Serialize)]
+pub struct SendTokenAccountMetaResponse {
+    pub pubkey: String,
+    #[serde(rename = "isSigner")]
+    pub is_signer: bool,
+}
 
 #[derive(Deserialize)]
 struct SendTokenRequest {
-    destination: String,
-    mint: String,
-    owner: String,
-    amount: u64,
+    destination: Option<String>,
+    mint: Option<String>,
+    owner: Option<String>,
+    amount: Option<u64>,
 }
 
 #[derive(Serialize)]
 struct SendTokenResponse {
     program_id: String,
-    accounts: Vec<AccountMetaResponse>,
+    accounts: Vec<SendTokenAccountMetaResponse>,
     instruction_data: String,
 }
 
 #[post("/send/token")]
 pub async fn send_token(req: web::Json<SendTokenRequest>) -> actix_web::Result<HttpResponse> {
-    if req.destination.is_empty() || req.mint.is_empty() || req.owner.is_empty() {
-        return Ok(HttpResponse::Ok().json(serde_json::json!({
+    if req.destination.is_none()
+        || req.mint.is_none()
+        || req.owner.is_none()
+        || req.amount.is_none()
+    {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
             "success": false,
             "error": "Missing required fields"
         })));
     }
-    let destination_pubkey = match Pubkey::from_str(&req.destination) {
+    let destination_pubkey = match Pubkey::from_str(&req.destination.as_ref().unwrap()) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Invalid destination address"
             })));
         }
     };
-    let mint_pubkey = match Pubkey::from_str(&req.mint) {
+    let mint_pubkey = match Pubkey::from_str(&req.mint.as_ref().unwrap()) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Invalid mint address"
             })));
         }
     };
-    let owner_pubkey = match Pubkey::from_str(&req.owner) {
+    let owner_pubkey = match Pubkey::from_str(&req.owner.as_ref().unwrap()) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Invalid owner address"
             })));
         }
     };
-    let amount = req.amount;
+    let source_token_account = get_associated_token_address(&owner_pubkey, &mint_pubkey);
+    let destination_token_account = get_associated_token_address(&destination_pubkey, &mint_pubkey);
     // For a real transfer, you need the source token account, but here we assume destination is the token account.
     let ix = match spl_token::instruction::transfer(
         &spl_token::ID,
-        &mint_pubkey,        // source token account (should be ATA of owner for mint)
-        &destination_pubkey, // destination token account
+        &owner_pubkey, // source token account (should be ATA of owner for mint)
+        &destination_token_account, // destination token account
         &owner_pubkey,
         &[],
-        amount,
+        req.amount.unwrap(),
     ) {
         Ok(ix) => ix,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Failed to create transfer instruction"
             })));
         }
     };
-    let accounts: Vec<AccountMetaResponse> = ix
+    let accounts: Vec<SendTokenAccountMetaResponse> = ix
         .accounts
         .iter()
-        .map(|meta| AccountMetaResponse {
+        .map(|meta| SendTokenAccountMetaResponse {
             pubkey: meta.pubkey.to_string(),
             is_signer: meta.is_signer,
-            is_writable: meta.is_writable,
         })
         .collect();
-    let instruction_data = base64::encode(&ix.data);
+
+    let instruction_data = general_purpose::STANDARD.encode(&ix.data);
     let data = SendTokenResponse {
         program_id: ix.program_id.to_string(),
         accounts,
         instruction_data,
     };
-    let response = ApiResponse {
-        success: true,
-        data: data,
-    };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "data": data
+    })))
 }

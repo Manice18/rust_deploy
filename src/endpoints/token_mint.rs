@@ -1,21 +1,21 @@
 use std::str::FromStr;
 
 use actix_web::{HttpResponse, post, web};
-use base64;
+use base64::{Engine as _, engine::general_purpose};
 use serde::Deserialize;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
+use spl_associated_token_account::get_associated_token_address;
 use spl_token::instruction::mint_to;
 
 use crate::helpers::AccountMetaResponse;
-use crate::helpers::ApiResponse;
 
 #[derive(Deserialize)]
 struct TokenMintRequest {
-    mint: String,
-    destination: String,
-    authority: String,
-    amount: u64,
+    mint: Option<String>,
+    destination: Option<String>,
+    authority: Option<String>,
+    amount: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -27,28 +27,40 @@ struct TokenMintResponse {
 
 #[post("/token/mint")]
 pub async fn token_mint(req: web::Json<TokenMintRequest>) -> actix_web::Result<HttpResponse> {
-    let mint_pubkey = match Pubkey::from_str(&req.mint) {
+    if req.mint.is_none()
+        || req.destination.is_none()
+        || req.authority.is_none()
+        || req.amount.is_none()
+    {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "success": false,
+            "error": "Missing required fields"
+        })));
+    }
+    let mint_pubkey = match Pubkey::from_str(&req.mint.as_ref().unwrap()) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Invalid mint pubkey"
             })));
         }
     };
-    let destination_pubkey = match Pubkey::from_str(&req.destination) {
+    let destination_owner_pubkey = match Pubkey::from_str(&req.destination.as_ref().unwrap()) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Invalid destination pubkey"
             })));
         }
     };
-    let authority_pubkey = match Pubkey::from_str(&req.authority) {
+    let destination_token_account =
+        get_associated_token_address(&destination_owner_pubkey, &mint_pubkey);
+    let authority_pubkey = match Pubkey::from_str(&req.authority.as_ref().unwrap()) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Invalid authority pubkey"
             })));
@@ -58,14 +70,14 @@ pub async fn token_mint(req: web::Json<TokenMintRequest>) -> actix_web::Result<H
     let ix = match mint_to(
         &spl_token::ID,
         &mint_pubkey,
-        &destination_pubkey,
+        &destination_token_account,
         &authority_pubkey,
-        &[&authority_pubkey],
-        amount,
+        &[],
+        amount.unwrap(),
     ) {
         Ok(ix) => ix,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Failed to create instruction"
             })));
@@ -82,7 +94,7 @@ pub async fn token_mint(req: web::Json<TokenMintRequest>) -> actix_web::Result<H
         })
         .collect();
 
-    let instruction_data = base64::encode(&ix.data);
+    let instruction_data = general_purpose::STANDARD.encode(&ix.data);
 
     let data = TokenMintResponse {
         program_id: ix.program_id.to_string(),
@@ -90,9 +102,8 @@ pub async fn token_mint(req: web::Json<TokenMintRequest>) -> actix_web::Result<H
         instruction_data,
     };
 
-    let response = ApiResponse {
-        success: true,
-        data: data,
-    };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "data": data
+    })))
 }

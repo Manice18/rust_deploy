@@ -1,20 +1,20 @@
 use std::str::FromStr;
 
 use actix_web::{HttpResponse, post, web};
-use base64;
+use base64::{Engine as _, engine::general_purpose};
 use serde::Deserialize;
 use serde::Serialize;
 use solana_program::pubkey::Pubkey;
 use spl_token::instruction::initialize_mint;
 
 use crate::helpers::AccountMetaResponse;
-use crate::helpers::ApiResponse;
 
 #[derive(Deserialize)]
 struct TokenCreateRequest {
-    mintAuthority: String,
-    mint: String,
-    decimals: u8,
+    #[serde(rename = "mintAuthority")]
+    mint_authority: Option<String>,
+    mint: Option<String>,
+    decimals: Option<u8>,
 }
 
 #[derive(Serialize)]
@@ -26,19 +26,25 @@ struct TokenCreateResponse {
 
 #[post("/token/create")]
 pub async fn token_create(req: web::Json<TokenCreateRequest>) -> actix_web::Result<HttpResponse> {
-    let mint_pubkey = match Pubkey::from_str(&req.mint) {
+    if req.mint.is_none() || req.mint_authority.is_none() || req.decimals.is_none() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "success": false,
+            "error": "Missing required fields"
+        })));
+    }
+    let mint_pubkey = match Pubkey::from_str(&req.mint.as_ref().unwrap()) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Invalid mint pubkey"
             })));
         }
     };
-    let mint_authority_pubkey = match Pubkey::from_str(&req.mintAuthority) {
+    let mint_authority_pubkey = match Pubkey::from_str(&req.mint_authority.as_ref().unwrap()) {
         Ok(pk) => pk,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "Invalid mint authority pubkey"
             })));
@@ -52,13 +58,13 @@ pub async fn token_create(req: web::Json<TokenCreateRequest>) -> actix_web::Resu
         &mint_pubkey,
         &mint_authority_pubkey,
         freeze_authority.as_ref(),
-        decimals,
+        decimals.unwrap(),
     ) {
         Ok(ix) => ix,
         Err(_) => {
-            return Ok(HttpResponse::Ok().json(serde_json::json!({
-                "success": false,
-                "error": "Failed to create instruction"
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "success": false,
+            "error": "Failed to create instruction"
             })));
         }
     };
@@ -73,16 +79,15 @@ pub async fn token_create(req: web::Json<TokenCreateRequest>) -> actix_web::Resu
         })
         .collect();
 
-    let instruction_data = base64::encode(ix.data);
+    let instruction_data = general_purpose::STANDARD.encode(ix.data);
 
     let data = TokenCreateResponse {
         program_id: ix.program_id.to_string(),
         accounts,
         instruction_data,
     };
-    let response = ApiResponse {
-        success: true,
-        data: data,
-    };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "data": data
+    })))
 }

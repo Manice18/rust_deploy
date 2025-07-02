@@ -1,4 +1,3 @@
-use crate::helpers::ApiResponse;
 use actix_web::{HttpResponse, post};
 use bs58;
 use serde::Serialize;
@@ -16,9 +15,8 @@ pub async fn create_keypair() -> actix_web::Result<HttpResponse> {
     let pubkey = keypair.pubkey().to_string();
     let secret = bs58::encode(keypair.to_bytes()).into_string();
     let data = KeypairData { pubkey, secret };
-    let response = ApiResponse {
-        success: true,
-        data,
-    };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "data": data
+    })))
 }
