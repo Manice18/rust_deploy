@@ -1,0 +1,21 @@
+{
+  "name": "test-endpoints",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98.2",
+    "axios": "^1.10.0",
+    "bs58": "^6.0.0",
+    "jest": "^30.0.3",
+    "tweetnacl": "^1.0.3"
+  }
+}
